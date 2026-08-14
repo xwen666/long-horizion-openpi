@@ -1,0 +1,116 @@
+version: 1
+name: pi05_piperx_lora
+base_config_name: pi05_piperx_lora
+
+paths:
+  dataset_root: /cc/cws_workspace/datasets/data1_plus_data2
+  base_checkpoint_params: gs://openpi-assets/checkpoints/pi05_base/params
+  assets_base_dir: /root/workplace/p2/openpi/assets
+  checkpoint_base_dir: /root/workplace/p2/openpi/checkpoints
+  current_checkpoint_run: /root/workplace/p2/openpi/checkpoints/pi05_piperx_lora/piperx_pi05_lora_clean_base_fixed_target_20260506
+  current_checkpoint_step: /root/workplace/p2/openpi/checkpoints/pi05_piperx_lora/piperx_pi05_lora_clean_base_fixed_target_20260506/19999
+
+dataset:
+  type: lerobot_piperx
+  repo_id: data1_plus_data2
+  asset_id: local_piperx_data1_plus_data2
+  prompt_from_task: true
+  default_prompt: First put the cylinder into the white box, then put the cube into the brown box.
+  use_delta_joint_actions: true
+  effective_robot_action_dims: 7
+
+model:
+  type: pi05
+  pi05: true
+  action_dim: 32
+  action_horizon: 16
+  discrete_state_input: false
+  paligemma_variant: gemma_2b_lora
+  action_expert_variant: gemma_300m_lora
+  trainable_parameters: lora_params_plus_non_llm_heads
+
+training:
+  exp_name: piperx_pi05_lora_clean_base_fixed_target
+  seed: 42
+  batch_size: 4
+  num_workers: 0
+  num_train_steps: 20000
+  log_interval: 100
+  save_interval: 100
+  keep_period: 5000
+  ema_decay: null
+  overwrite: true
+  resume: false
+  wandb_enabled: false
+  fsdp_devices: 1
+
+optimizer:
+  name: adamw
+  clip_gradient_norm: 1.0
+
+lr_schedule:
+  name: cosine_decay
+  warmup_steps: 1000
+  peak_lr: 5.0e-5
+  decay_steps: 100000
+  decay_lr: 5.0e-5
+
+env:
+  OPENPI_DATA_HOME: /root/workplace/p2/openpi
+  XLA_PYTHON_CLIENT_MEM_FRACTION: 0.90
+  XLA_PYTHON_CLIENT_PREALLOCATE: "false"
+
+commands:
+  compute_norm_stats: |-
+    OPENPI_DATA_HOME=/root/workplace/p2/openpi \
+    uv run python scripts/compute_norm_stats.py --config-name pi05_piperx_lora
+
+  train: |-
+    OPENPI_DATA_HOME=/root/workplace/p2/openpi \
+    XLA_PYTHON_CLIENT_MEM_FRACTION=0.90 \
+    XLA_PYTHON_CLIENT_PREALLOCATE=false \
+    uv run python scripts/train.py pi05_piperx_lora \
+      --exp-name piperx_pi05_lora_clean_base_fixed_target \
+      --data.repo-id data1_plus_data2 \
+      --data.assets.asset-id local_piperx_data1_plus_data2 \
+      --weight-loader.params-path gs://openpi-assets/checkpoints/pi05_base/params \
+      --batch-size 4 \
+      --num-workers 0 \
+      --num-train-steps 20000 \
+      --log-interval 100 \
+      --save-interval 100 \
+      --keep-period 5000 \
+      --checkpoint-base-dir /root/workplace/p2/openpi/checkpoints \
+      --overwrite \
+      --no-wandb-enabled
+
+  resume: |-
+    OPENPI_DATA_HOME=/root/workplace/p2/openpi \
+    XLA_PYTHON_CLIENT_MEM_FRACTION=0.90 \
+    XLA_PYTHON_CLIENT_PREALLOCATE=false \
+    uv run python scripts/train.py pi05_piperx_lora \
+      --exp-name piperx_pi05_lora_clean_base_fixed_target \
+      --data.repo-id data1_plus_data2 \
+      --data.assets.asset-id local_piperx_data1_plus_data2 \
+      --weight-loader.params-path gs://openpi-assets/checkpoints/pi05_base/params \
+      --batch-size 4 \
+      --num-workers 0 \
+      --num-train-steps 20000 \
+      --log-interval 100 \
+      --save-interval 100 \
+      --keep-period 5000 \
+      --checkpoint-base-dir /root/workplace/p2/openpi/checkpoints \
+      --resume \
+      --no-wandb-enabled
+
+  evaluate_action_mae: |-
+    CUDA_VISIBLE_DEVICES=0 \
+    XLA_PYTHON_CLIENT_PREALLOCATE=false \
+    uv run python scripts/check_piperx_policy_and_render.py \
+      --config-name pi05_piperx_lora \
+      --checkpoint-dir /root/workplace/p2/openpi/checkpoints/pi05_piperx_lora/piperx_pi05_lora_clean_base_fixed_target_20260506/19999 \
+      --dataset-root /cc/cws_workspace/datasets/data1_plus_data2 \
+      --episode 110 \
+      --frames 20 \
+      --compare-gt \
+      --output /root/workplace/p2/results/openpi_vis/pi05_piperx_lora_eval_gt_vs_pred.mp4

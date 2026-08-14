@@ -1,0 +1,133 @@
+version: 1
+name: grasp_200lora_pi05_lora
+base_config_name: pi05_grasp_200_strict_lora
+
+notes:
+  - "Workspace currently contains /cc/openpi/grasp_200. If /cc/openpi/grasp_200lora exists on your machine, replace dataset_root in this file."
+  - "Use the local pi05_base checkpoint path below to avoid loading from ~/.cache/openpi."
+  - "This strict LoRA config is the fastest option in this workspace."
+  - "It trains only action-expert LoRA plus action_in_proj, time_mlp_in, time_mlp_out, and action_out_proj."
+  - "It explicitly reloads norm stats from /cc/openpi/assets/pi05_grasp_200_standard_lora/grasp_200 so training uses the existing grasp_200 normalization."
+
+paths:
+  dataset_root: /cc/openpi/grasp_200
+  splits_path: /cc/openpi/grasp_200lora_splits/splits.json
+  base_checkpoint_params: /cc/openpi/openpi-assets/checkpoints/pi05_base/params
+  assets_base_dir: /cc/openpi/assets
+  norm_stats_assets_dir: /cc/openpi/assets/pi05_grasp_200_standard_lora
+  norm_stats_asset_id: grasp_200
+  checkpoint_base_dir: /cc/openpi/checkpoints
+
+dataset:
+  repo_id: grasp_200lora
+  train_split: train
+  eval_split: test
+  default_prompt: First put the cylinder into the white box, then put the cube into the brown box.
+  prompt_from_task: true
+  use_delta_joint_actions: true
+  action_dim: 7
+
+model:
+  type: pi05
+  pi05: true
+  action_dim: 7
+  action_horizon: 20
+  discrete_state_input: false
+  paligemma_variant: gemma_2b_lora
+  action_expert_variant: gemma_300m_lora
+  trainable_parameters: action_expert_lora_plus_small_action_heads
+
+training:
+  exp_name: pi05_grasp_200lora_lora
+  seed: 42
+  batch_size: 32
+  num_workers: 2
+  num_train_steps: 20000
+  log_interval: 20
+  save_interval: 1000
+  eval_interval: 1000
+  eval_num_batches: 16
+  eval_use_ema: true
+  keep_period: 5000
+  ema_decay: null
+  overwrite: true
+  resume: false
+  wandb_enabled: false
+  fsdp_devices: 1
+
+optimizer:
+  name: adamw
+  b1: 0.9
+  b2: 0.95
+  eps: 1.0e-8
+  weight_decay: 1.0e-10
+  clip_gradient_norm: 1.0
+
+lr_schedule:
+  name: cosine_decay
+  warmup_steps: 1000
+  peak_lr: 3.0e-5
+  decay_steps: 10000
+  decay_lr: 1.0e-5
+
+env:
+  OPENPI_DATA_HOME: /cc/openpi
+  OPENPI_VIDEO_BACKEND: pyav
+  XLA_PYTHON_CLIENT_MEM_FRACTION: 0.90
+  XLA_PYTHON_CLIENT_PREALLOCATE: "false"
+
+commands:
+  compute_norm_stats: |-
+    OPENPI_GRASP_REPO_ID=grasp_200lora \
+    OPENPI_GRASP_DATASET_ROOT=/cc/openpi/grasp_200 \
+    OPENPI_GRASP_SPLITS_PATH=/cc/openpi/grasp_200lora_splits/splits.json \
+    OPENPI_DATA_HOME=/cc/openpi \
+    uv run python scripts/compute_norm_stats.py --config-name pi05_grasp_200_strict_lora
+
+  train: |-
+    OPENPI_DATA_HOME=/cc/openpi \
+    OPENPI_VIDEO_BACKEND=pyav \
+    XLA_PYTHON_CLIENT_MEM_FRACTION=0.90 \
+    XLA_PYTHON_CLIENT_PREALLOCATE=false \
+    uv run python scripts/train.py pi05_grasp_200_strict_lora \
+      --exp-name pi05_grasp_200lora_lora \
+      --data.repo-id grasp_200lora \
+      --data.root /cc/openpi/grasp_200 \
+      --data.splits-path /cc/openpi/grasp_200lora_splits/splits.json \
+      --data.video-backend pyav \
+      --data.assets.assets-dir /cc/openpi/assets/pi05_grasp_200_standard_lora \
+      --data.assets.asset-id grasp_200 \
+      --weight-loader.params-path /cc/openpi/openpi-assets/checkpoints/pi05_base/params \
+      --batch-size 32 \
+      --num-workers 2 \
+      --num-train-steps 10000 \
+      --save-interval 1000 \
+      --eval-interval 1000 \
+      --eval-num-batches 16 \
+      --checkpoint-base-dir /cc/openpi/checkpoints \
+      --overwrite \
+      --no-wandb-enabled
+
+  resume: |-
+    OPENPI_DATA_HOME=/cc/openpi \
+    OPENPI_VIDEO_BACKEND=pyav \
+    XLA_PYTHON_CLIENT_MEM_FRACTION=0.90 \
+    XLA_PYTHON_CLIENT_PREALLOCATE=false \
+    uv run python scripts/train.py pi05_grasp_200_strict_lora \
+      --exp-name pi05_grasp_200lora_lora \
+      --data.repo-id grasp_200lora \
+      --data.root /cc/openpi/grasp_200 \
+      --data.splits-path /cc/openpi/grasp_200lora_splits/splits.json \
+      --data.video-backend pyav \
+      --data.assets.assets-dir /cc/openpi/assets/pi05_grasp_200_standard_lora \
+      --data.assets.asset-id grasp_200 \
+      --weight-loader.params-path /cc/openpi/openpi-assets/checkpoints/pi05_base/params \
+      --batch-size 32 \
+      --num-workers 2 \
+      --num-train-steps 10000 \
+      --save-interval 1000 \
+      --eval-interval 1000 \
+      --eval-num-batches 16 \
+      --checkpoint-base-dir /cc/openpi/checkpoints \
+      --resume \
+      --no-wandb-enabled
