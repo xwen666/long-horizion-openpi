@@ -4,7 +4,7 @@
 
 ## 系统架构
 
-![OpenPI WAM long-horizon architecture](docs/assets/openpi_wam_architecture.svg)
+![OpenPI WAM long-horizon architecture](docs/assets/7bfcd9ab-7e49-4cb2-aee5-bbfab1033e8b.png)
 
 ### 1. 高层语义规划
 
